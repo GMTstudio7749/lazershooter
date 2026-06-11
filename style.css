@@ -1,5 +1,5 @@
 body {
-    margin: 0;
+    margin : 0;
     padding: 0;
     background-color: #ffffff;
     overflow: hidden;
@@ -13,11 +13,10 @@ body {
     cursor: crosshair;
 }
 
-/* Viền LED RGB chạy quanh 4 cạnh trang web (Page Edge RGB) */
 .rgb-border {
     position: fixed;
-    top: 0;
-    left: 0;
+    top : 0;
+    left : 0; 
     width: 100vw;
     height: 100vh;
     pointer-events: none;
@@ -29,11 +28,10 @@ body {
 }
 
 @keyframes rgbShift {
-    0% { filter: hue-rotate(0deg); }
-    100% { filter: hue-rotate(360deg); }
+    0% {filter: hue-rotate(0deg);}
+    100% {filter: hue-rotate(360deg)}
 }
 
-/* Bảng thông tin hướng dẫn giao diện */
 .instructions {
     position: absolute;
     top: 20px;
@@ -45,7 +43,7 @@ body {
     border-radius: 4px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     pointer-events: none;
-    z-index: 10;
+    z-index: 10;    
     line-height: 1.6;
     font-size: 13px;
-}
+}   
