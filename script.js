@@ -28,7 +28,7 @@ let player = {
     maxSpeed: 6.5,
     hp: 100,
     maxHp: 100,
-    color: '#3498db',
+    color: '#126578',
     skillCooldown: 0,
     maxSkillCooldown: 200
 };
@@ -41,22 +41,23 @@ const keysPressed = {
 
 // Cấu hình hoạt họa Laser Rung Động
 const mouse = { x: 0, y: 0, isDown: false };
-let laser = {
+let laser = {   
     currentLength: 0,
     maxLength: 2500,
-    growSpeed: 150,
+    growSpeed: 100,
     currentWidth: 0,
-    maxWidth: 7,
-    widthGrowSpeed: 0.9,
-    widthShrinkSpeed: 0.6,
-    recoilForce: 0.22,
-    isActive: false
+    maxWidth: 8,
+    widthGrowSpeed: 0.6,
+    widthShrinkSpeed: 0.5,
+    recoilForce: 0.25,
+    isActive: false,
+    holdFrames: 0 
 };
 
 // Các mảng đối tượng
 let zombies = [];
 let enemyProjectiles = []; // Chứa đạn của Skeleton bắn ra
-let particles = [];
+let particles = []; 
 let shockwaves = [];
 let zombieSpawnTimer = 0;
 
@@ -94,7 +95,7 @@ function resetGame() {
     player.x = window.innerWidth / 2 - 25;
     player.y = window.innerHeight / 2 - 25;
     player.vx = 0;
-    player.vy = 0;
+    player.vy = 0;d
     player.skillCooldown = 0;
     zombies = [];
     enemyProjectiles = [];
@@ -123,6 +124,7 @@ function createExplosion(x, y, baseColorObj) {
 
 function createSparks(x, y, angle) {
     for (let i = 0; i < 2; i++) {
+        // Góc tia lửa bắn ngược lại hướng laser (angle + Math.PI)
         let sparkAngle = angle + Math.PI + (Math.random() * 1.0 - 0.5);
         let speed = 2 + Math.random() * 4;
         particles.push({
@@ -132,7 +134,7 @@ function createSparks(x, y, angle) {
             radius: 1.5 + Math.random() * 2,
             alpha: 1,
             decay: 0.04 + Math.random() * 0.04,
-            color: Math.random() > 0.3 ? '#ffffff' : '#ff3300'
+            color: Math.random() > 0.3 ? '#f3e15e' : '#ff3300'
         });
     }
 }
@@ -164,36 +166,66 @@ function getLaserImpact(startX, startY, angle, maxRange) {
     return { distance: closestDistance, zombie: hitZombie };
 }
 
-// --- 7. VẼ TIA LASER RUNG ĐỘNG PLASMA (UPPER LAYER) ---
-function drawLaser(offsetX, offsetY) {
+// --- 7. VẼ CẶP LASER: TÂM CHUỘT LUÔN Ở GIỮA, CHẬP TIA KHI BẮN NGANG ---
+function drawLaserPairs() {
     if (!laser.isActive) return;
 
-    let startX = player.x + player.width / 2 + offsetX;
-    let startY = player.y + player.height / 2 + offsetY;
-    let dx = mouse.x - startX;
-    let dy = mouse.y - startY;
-    let angle = Math.atan2(dy, dx);
+    let cx = player.x + player.width / 2;
+    let cy = player.y + player.height / 2;
 
-    let impact = getLaserImpact(startX, startY, angle, laser.currentLength);
+    // 1. TỌA ĐỘ MẮT CỐ ĐỊNH (Symmetric qua tâm nhân vật)
+    let eyeOffsetX = 12; // Khoảng cách từ tâm ra mỗi bên mắt
+    let eyeOffsetY = -5; // Đẩy lên phía trên thân một chút
+
+    let ax = cx - eyeOffsetX; // Mắt trái
+    let ay = cy + eyeOffsetY; 
+    let bx = cx + eyeOffsetX; // Mắt phải
+    let by = cy + eyeOffsetY; 
+
+    // 2. ĐIỂM CỐT LÕI: Tính toán góc bắn dựa trên TRUNG ĐIỂM của 2 mắt
+    let midX = cx;
+    let midY = cy + eyeOffsetY;
+    
+    // Tính góc chung từ trung điểm hướng thẳng tới tâm chuột
+    let sharedAngle = Math.atan2(mouse.y - midY, mouse.x - midX);
+
+    // 3. ÉP CẢ HAI TIA SỬ DỤNG CHUNG MỘT GÓC BẮN
+    // Nhờ toán học đối xứng, tâm chuột sẽ luôn nằm ở đường trung trực của 2 tia!
+    renderSingleLaser(ax, ay, sharedAngle);
+    renderSingleLaser(bx, by, sharedAngle);
+}
+
+// Hàm phụ trợ dùng chung để vẽ và xử lý va chạm cho một tia laser
+function renderSingleLaser(startX, startY, laserAngle) {
+    let impact = getLaserImpact(startX, startY, laserAngle, laser.currentLength);
     let actualLength = impact.distance; 
 
-    let endX = startX + Math.cos(angle) * actualLength;
-    let endY = startY + Math.sin(angle) * actualLength;
+    let endX = startX + Math.cos(laserAngle) * actualLength;
+    let endY = startY + Math.sin(laserAngle) * actualLength;
 
     if (impact.zombie && laser.currentWidth > 2) {
         impact.zombie.isBeingCooked = true;
-        impact.zombie.hp -= 1.4; // Sát thương sấy laser
-        createSparks(endX, endY, angle);
+        impact.zombie.hp -= 1.4; // Sát thương vẫn giữ nguyên liên tục
+        createSparks(endX, endY, laserAngle);
+
+        // KIỂM TRA ĐIỀU KIỆN KNOCKBACK ZOMBIE: Đồng bộ từ frame 30 đến dưới 90
+        if (laser.holdFrames >= 30 && laser.holdFrames < 90) {
+            let zombiePushForce = 2.5;
+            impact.zombie.x += Math.cos(laserAngle) * zombiePushForce;
+            impact.zombie.y += Math.sin(laserAngle) * zombiePushForce;
+        }
     }
 
-    // TẠO ĐỘ RUNG NHẸ NGAU NHIÊN CHO TIA LASER THÊM CHÂN THỰC
-    let jitterWidth = laser.currentWidth * (0.85 + Math.random() * 0.3);
+    let jitterWidth = laser.currentWidth * (0.7 + Math.random() * 0.3);
     let jitterBlur = 12 + Math.random() * 10;
 
     ctx.save();
+    // Gợi ý cho câu hỏi số 4: Bật Additive Blending để khi 2 tia chập làm 1, nó sẽ phát sáng chói lóa
+    ctx.globalCompositeOperation = 'lighter'; 
+
     ctx.shadowBlur = jitterBlur;
-    ctx.shadowColor = '#ff1111';
-    ctx.strokeStyle = '#ff3333';
+    ctx.shadowColor = '#ff0000';
+    ctx.strokeStyle = '#ff0000';
     ctx.lineWidth = jitterWidth;
     ctx.lineCap = 'round';
 
@@ -209,6 +241,7 @@ function drawLaser(offsetX, offsetY) {
     ctx.moveTo(startX, startY);
     ctx.lineTo(endX, endY);
     ctx.stroke();
+    
     ctx.restore();
 }
 
@@ -255,15 +288,31 @@ function gameLoop() {
     }
 
     // Phóng to thu nhỏ laser bằng chuột
+    // --- XỬ LÝ PHÓNG TO THU NHỎ & TIMELINE 3 GIAI ĐOẠN CỦA LASER (MỚI) ---
     if (mouse.isDown) {
-        laser.isActive = true;
-        if (laser.currentLength < laser.maxLength) laser.currentLength += laser.growSpeed;
-        if (laser.currentWidth < laser.maxWidth) laser.currentWidth += laser.widthGrowSpeed;
+        laser.holdFrames++; // Tăng bộ đếm khung hình giữ chuột
 
-        let pAngle = Math.atan2(mouse.y - (player.y + player.height/2), mouse.x - (player.x + player.width/2));
-        player.vx -= Math.cos(pAngle) * laser.recoilForce;
-        player.vy -= Math.sin(pAngle) * laser.recoilForce;
+        // GIAI ĐOẠN 1: 0.5 giây đầu tiên (Frames 0 -> 29) -> Đang gồng, chưa xuất tia
+        if (laser.holdFrames < 30) {
+            laser.isActive = false; 
+            laser.currentLength = 0;
+            laser.currentWidth = 0;
+        } 
+        // GIAI ĐOẠN 2 & 3: Từ frame 30 trở đi -> Kích hoạt bắn Laser
+        else {
+            laser.isActive = true;
+            if (laser.currentLength < laser.maxLength) laser.currentLength += laser.growSpeed;
+            if (laser.currentWidth < laser.maxWidth) laser.currentWidth += laser.widthGrowSpeed;
+
+            // RECOIL PLAYER: Chỉ giật lùi trong GIÂY THỨ 2 (Từ frame 30 đến frame 89 - kéo dài đúng 1s)
+            if (laser.holdFrames >= 30 && laser.holdFrames < 90) {
+                let pAngle = Math.atan2(mouse.y - (player.y + player.height/2), mouse.x - (player.x + player.width/2));
+                player.vx -= Math.cos(pAngle) * laser.recoilForce;
+                player.vy -= Math.sin(pAngle) * laser.recoilForce;
+            }
+        }
     } else {
+        laser.holdFrames = 0; 
         if (laser.currentWidth > 0) {
             laser.currentWidth -= laser.widthShrinkSpeed;
         } else {
@@ -522,13 +571,66 @@ function gameLoop() {
     ctx.fill();
 
     ctx.save();
-    ctx.fillStyle = '#ff1111';
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = '#ff0000';
-    ctx.beginPath();
-    ctx.arc(player.x + player.width/2 - 11, player.y + player.height/2 - 3, 3.5, 0, Math.PI * 2);
-    ctx.arc(player.x + player.width/2 + 11, player.y + player.height/2 - 3, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+    
+    let eyeColor = '#000000'; // Màu mắt mặc định lúc bình thường
+    let eyeGlow = 8;
+    let isSupermanMode = false;
+    let supermanJitterBlur = 0;
+
+    // QUẢN LÝ ĐỒ HỌA MẮT THEO TIMELINE 3 GIAI ĐOẠN
+    if (mouse.isDown && laser.holdFrames < 30) {
+        // GIAI ĐOẠN 1: Đang gồng (0.5 giây đầu) -> Hồng hóa Đỏ và sáng dần lên
+        let progress = laser.holdFrames / 30; 
+        let currentGB = Math.floor(160 - progress * (160 - 17)); 
+        eyeColor = `rgb(255, ${currentGB}, ${currentGB})`;
+        eyeGlow = 6 + progress * 22; 
+    } else if (laser.isActive) {
+        // GIAI ĐOẠN 2 & 3: Đang bắn -> Bật chế độ SUPERMAN HEAT VISION
+        isSupermanMode = true;
+        
+        // Tạo độ rung nhấp nháy ngẫu nhiên cho quầng sáng mắt (đồng bộ với laser)
+        // Nếu ở giây thứ 3 trở đi (holdFrames >= 90), giảm bớt độ rực để báo hiệu súng giảm lực
+        if (laser.holdFrames >= 90) {
+            supermanJitterBlur = 10 + Math.random() * 6; // Giảm sáng một chút khi hết knockback
+        } else {
+            supermanJitterBlur = 18 + Math.random() * 14; // Rực cháy cực đại ở giây bắn mạnh
+        }
+    }
+
+    // TIẾN HÀNH VẼ MẮT DỰA TRÊN TRẠNG THÁI
+    if (isSupermanMode) {
+        // Bật chế độ cộng hưởng ánh sáng Additive Blending để mắt phát sáng rực rỡ
+        ctx.globalCompositeOperation = 'lighter';
+
+        // LỚP 1: QUẦNG SÁNG PLASMA ĐỎ (Outer Glowing Shield)
+        ctx.shadowBlur = supermanJitterBlur;
+        ctx.shadowColor = '#ff1111';
+        ctx.fillStyle = '#ff3333';
+        ctx.beginPath();
+        // Tăng nhẹ kích thước mắt lên 4px để tạo độ bề thế khi bắn
+        ctx.arc(player.x + player.width/2 - 11, player.y + player.height/2 - 3, 4.2, 0, Math.PI * 2);
+        ctx.arc(player.x + player.width/2 + 11, player.y + player.height/2 - 3, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // LỚP 2: LÕI NĂNG LƯỢNG TRẮNG SIÊU SÁNG (White Laser Core)
+        ctx.shadowBlur = 0; // Tắt shadow để lõi trắng sắc nét, không bị nhòe
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(player.x + player.width/2 - 11, player.y + player.height/2 - 3, 2.0, 0, Math.PI * 2);
+        ctx.arc(player.x + player.width/2 + 11, player.y + player.height/2 - 3, 2.0, 0, Math.PI * 2);
+        ctx.fill();
+
+    } else {
+        // VẼ MẮT BÌNH THƯỜNG / ĐANG GỒNG
+        ctx.fillStyle = eyeColor;
+        ctx.shadowBlur = eyeGlow;
+        ctx.shadowColor = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(player.x + player.width/2 - 11, player.y + player.height/2 - 3, 3.5, 0, Math.PI * 2);
+        ctx.arc(player.x + player.width/2 + 11, player.y + player.height/2 - 3, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
     ctx.restore();
 
     let pBarW = 64;
@@ -552,8 +654,7 @@ function gameLoop() {
     if (player.hp < player.maxHp) player.hp += 0.015; 
 
     // --- H. VẼ TIA LASER ĐÈ TRÊN BỀ MẶT ---
-    drawLaser(-11, -3);
-    drawLaser(11, -3);
+    drawLaserPairs();
 
     // --- I. VẼ THANH TIẾN TRÌNH LEVEL ---
     drawTopUI();
