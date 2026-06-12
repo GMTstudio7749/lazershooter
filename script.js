@@ -174,7 +174,7 @@ function drawLaserPairs() {
     let cy = player.y + player.height / 2;
 
     // 1. TỌA ĐỘ MẮT CỐ ĐỊNH (Symmetric qua tâm nhân vật)
-    let eyeOffsetX = 12; // Khoảng cách từ tâm ra mỗi bên mắt
+    let eyeOffsetX = 10; // Khoảng cách từ tâm ra mỗi bên mắt
     let eyeOffsetY = -5; // Đẩy lên phía trên thân một chút
 
     let ax = cx - eyeOffsetX; // Mắt trái
